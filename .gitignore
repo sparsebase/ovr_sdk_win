@@ -1,0 +1,14 @@
+*.flags
+CMakeCache.txt
+build/
+.build/
+vs-build/
+.vs
+.vscode
+cmake_install.cmake
+lib/
+xcode/
+website/node_modules
+git
+*.spv
+VulkanSDK
