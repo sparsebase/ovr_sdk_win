@@ -76,7 +76,7 @@ public:
         colorViewInfo.subresourceRange.levelCount = 1;
         colorViewInfo.subresourceRange.baseArrayLayer = 0;
         colorViewInfo.subresourceRange.layerCount = 1;
-        CHECKVK(vkCreateImageView(Platform.device, &colorViewInfo, nullptr, &colorView));
+        CHECKVK(vkCreateImageView(Platform.device_, &colorViewInfo, nullptr, &colorView));
 
         // Create depth image view
         VkImageViewCreateInfo depthViewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
@@ -93,7 +93,7 @@ public:
         depthViewInfo.subresourceRange.baseArrayLayer = 0;
         depthViewInfo.subresourceRange.layerCount = 1;
         depthViewInfo.flags = 0;
-        CHECKVK(vkCreateImageView(Platform.device, &depthViewInfo, nullptr, &depthView));
+        CHECKVK(vkCreateImageView(Platform.device_, &depthViewInfo, nullptr, &depthView));
 		
         CHECK(fb.Create(size, renderPass, colorView, depthView));
 
@@ -105,12 +105,12 @@ public:
         fb.Release();
         if (colorView)
         {
-            vkDestroyImageView(Platform.device, colorView, nullptr);
+            vkDestroyImageView(Platform.device_, colorView, nullptr);
         }
 
         if (depthView)
         {
-            vkDestroyImageView(Platform.device, depthView, nullptr);
+            vkDestroyImageView(Platform.device_, depthView, nullptr);
         }
 
         // Note we don't own image, it will get destroyed when ovr_DestroyTextureSwapChain is called
@@ -156,7 +156,7 @@ public:
         depthDesc.MiscFlags = ovrTextureMisc_DX_Typeless;
         depthDesc.BindFlags = ovrTextureBind_DX_DepthStencil;
         depthDesc.StaticImage = ovrFalse;
-        CHECKOVR(ovr_CreateTextureSwapChainVk(session, Platform.device, &depthDesc, &depthChain));
+        CHECKOVR(ovr_CreateTextureSwapChainVk(session, Platform.device_, &depthDesc, &depthChain));
 
         // color
         ovrTextureSwapChainDesc colorDesc = {};
@@ -170,7 +170,7 @@ public:
         colorDesc.MiscFlags = ovrTextureMisc_DX_Typeless;
         colorDesc.BindFlags = ovrTextureBind_DX_RenderTarget;
         colorDesc.StaticImage = ovrFalse;
-        CHECKOVR(ovr_CreateTextureSwapChainVk(session, Platform.device, &colorDesc, &textureChain));
+        CHECKOVR(ovr_CreateTextureSwapChainVk(session, Platform.device_, &colorDesc, &textureChain));
         
         int textureCount = 0;
         CHECKOVR(ovr_GetTextureSwapChainLength(session, textureChain, &textureCount));
@@ -217,7 +217,7 @@ public:
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
             for (auto& te: texElements)
             {
@@ -268,7 +268,7 @@ public:
         mirrorDesc.Format = OVR_FORMAT_B8G8R8A8_UNORM_SRGB;
         mirrorDesc.Width = windowSize.w;
         mirrorDesc.Height = windowSize.h;
-        CHECKOVR(ovr_CreateMirrorTextureWithOptionsVk(session, Platform.device, &mirrorDesc, &mirrorTexture));
+        CHECKOVR(ovr_CreateMirrorTextureWithOptionsVk(session, Platform.device_, &mirrorDesc, &mirrorTexture));
 
         CHECKOVR(ovr_GetMirrorTextureBufferVk(session, mirrorTexture, &image));
 
@@ -295,56 +295,54 @@ public:
     }
 };
 
-// return true to retry later (e.g. after display lost)
-static bool MainLoop(bool retryCreate)
+// Per-eye render state
+class EyeState : public VulkanObject
 {
-    #define Abort(err) \
+public:
+	ovrSizei                size;
+	RenderPass              rp;
+	Pipeline                pipe;
+	TextureSwapChain        tex;
+
+	EyeState() :
+		size(),
+		rp(),
+		pipe(),
+		tex()
+	{
+	}
+
+	bool Create(ovrSession session, ovrSizei eyeSize, const PipelineLayout& layout, const ShaderProgram& sp, const VertexBuffer<Vertex>& vb)
+	{
+		size = eyeSize;
+		VkExtent2D vkSize = { (uint32_t)size.w, (uint32_t)size.h };
+		// Note: Format is hard-coded to VK_FORMAT_B8G8R8A8_SRGB since it is directly presentable on both Nvidia and AMD
+		CHECK(rp.Create(VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_D32_SFLOAT));
+		CHECK(pipe.Create(vkSize, layout, rp, sp, vb));
+		CHECK(tex.Create(session, vkSize, rp));
+		return true;
+	}
+
+	void Release()
+	{
+		tex.Release();
+		pipe.Release();
+		rp.Release();
+	}
+};
+
+#define Abort(err) \
     do { \
         retryCreate = false; \
         result = (err); \
         goto Done; \
     } while (0)
 
-    // Per-eye render state
-    class EyeState: public VulkanObject
-    {
-    public:
-        ovrSizei                size;
-        RenderPass              rp;
-        Pipeline                pipe;
-        TextureSwapChain        tex;
-
-        EyeState() :
-            size(),
-            rp(),
-            pipe(),
-            tex()
-        {
-        }
-
-        bool Create(ovrSession session, ovrSizei eyeSize, const PipelineLayout& layout, const ShaderProgram& sp, const VertexBuffer<Vertex>& vb)
-        {
-            size = eyeSize;
-            VkExtent2D vkSize = { (uint32_t)size.w, (uint32_t)size.h };
-            // Note: Format is hard-coded to VK_FORMAT_B8G8R8A8_SRGB since it is directly presentable on both Nvidia and AMD
-            CHECK(rp.Create(VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_D32_SFLOAT));
-            CHECK(pipe.Create(vkSize, layout, rp, sp, vb));
-            CHECK(tex.Create(session, vkSize, rp));
-            return true;
-        }
-
-        void Release()
-        {
-            tex.Release();
-            pipe.Release();
-            rp.Release();
-        }
-    };
-    
+// return true to retry later (e.g. after display lost)
+static bool MainLoop(bool retryCreate)
+{
     EyeState                    perEye[ovrEye_Count];
-
     MirrorTexture               mirrorTexture;
-
     Scene                       roomScene; 
     bool                        isVisible = true;
     long long                   frameIndex = 0;
@@ -366,7 +364,7 @@ static bool MainLoop(bool retryCreate)
     // Note: the mirror window can be any size, for this sample we use 1/2 the HMD resolution
     ovrSizei windowSize = { hmdDesc.Resolution.w / 2, hmdDesc.Resolution.h / 2 };
 
-    struct Vulkan::VrApi vrApi =
+    struct Vulkan::VRAPI vrApi =
     {
         // GetInstanceExtensionsVk
         [luid](char* extensionNames, uint32_t* extensionNamesSize)->bool
@@ -458,10 +456,10 @@ static bool MainLoop(bool retryCreate)
     }
 
     // Get swapchain images ready for blitting (use drawCmd instead of xferCmd to keep things simple)
-    Platform.sc.Prepare(Platform.CurrentDrawCmd().buf);
+    Platform.swapChain_.Prepare(Platform.CurrentDrawCmd().buf);
 
     // Perform all init-time commands
-    if (!(Platform.CurrentDrawCmd().End() && Platform.CurrentDrawCmd().Exec(Platform.drawQueue) && Platform.CurrentDrawCmd().Wait()))
+    if (!(Platform.CurrentDrawCmd().End() && Platform.CurrentDrawCmd().Exec(Platform.drawQueue_) && Platform.CurrentDrawCmd().Wait()))
     {
         Debug.Log("Executing initial command buffer failed");
         Abort(ovrError_InvalidOperation);
@@ -469,7 +467,7 @@ static bool MainLoop(bool retryCreate)
     Platform.CurrentDrawCmd().Reset();
 
     // Let the compositor know which queue to synchronize with
-    ovr_SetSynchronizationQueueVk(session, Platform.drawQueue);
+    ovr_SetSynchronizationQueueVk(session, Platform.drawQueue_);
 
     Debug.Log("Main loop...");
 
@@ -481,15 +479,15 @@ static bool MainLoop(bool retryCreate)
 
         // Keyboard inputs to adjust player orientation
         static float yaw(3.141592f); // I like pie
-        if (Platform.Key[VK_LEFT])  yaw += 0.02f;
-        if (Platform.Key[VK_RIGHT]) yaw -= 0.02f;
+        if (Platform.key_[VK_LEFT])  yaw += 0.02f;
+        if (Platform.key_[VK_RIGHT]) yaw -= 0.02f;
 
         // Keyboard inputs to adjust player position
         static Vector3f playerPos(0.0f, 0.0f, -5.0f);
-        if (Platform.Key['W'] || Platform.Key[VK_UP])   playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f( 0.00f, 0, -0.05f));
-        if (Platform.Key['S'] || Platform.Key[VK_DOWN]) playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f( 0.00f, 0, +0.05f));
-        if (Platform.Key['D'])                          playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f(+0.05f, 0,  0.00f));
-        if (Platform.Key['A'])                          playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f(-0.05f, 0,  0.00f));
+        if (Platform.key_['W'] || Platform.key_[VK_UP])   playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f( 0.00f, 0, -0.05f));
+        if (Platform.key_['S'] || Platform.key_[VK_DOWN]) playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f( 0.00f, 0, +0.05f));
+        if (Platform.key_['D'])                          playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f(+0.05f, 0,  0.00f));
+        if (Platform.key_['A'])                          playerPos += Matrix4f::RotationY(yaw).Transform(Vector3f(-0.05f, 0,  0.00f));
 
         Matrix4f rollPitchYaw = Matrix4f::RotationY(yaw);
         
@@ -517,7 +515,7 @@ static bool MainLoop(bool retryCreate)
 
         ovrTimewarpProjectionDesc posTimewarpProjectionDesc = {};
 
-	if (isVisible)
+	    if (isVisible)
         {
             Platform.NextDrawCmd();
             auto& cmd = Platform.CurrentDrawCmd();
@@ -562,18 +560,18 @@ static bool MainLoop(bool retryCreate)
             }
 
             cmd.End();
-            cmd.Exec(Platform.drawQueue);
+            cmd.Exec(Platform.drawQueue_);
 
             // Commit changes to the textures so they get picked up by the compositor
             for (auto eye: { ovrEye_Left, ovrEye_Right })
             {
                 perEye[eye].tex.Commit();
-	    }
+	        }
         }
-	else // Sleep to avoid spinning on mirror updates while HMD is doffed
-	{
-            ::Sleep(10);
-	}
+	    else // Sleep to avoid spinning on mirror updates while HMD is doffed
+	    {
+			::Sleep(10);
+	    }
 
         // Submit rendered eyes as an EyeFovDepth layer
         ovrLayerEyeFovDepth ld = {};
@@ -607,12 +605,12 @@ static bool MainLoop(bool retryCreate)
         // Blit mirror texture to the swapchain's back buffer
         // For now block until we have an output to render into
         // The swapchain uses VK_PRESENT_MODE_IMMEDIATE_KHR or VK_PRESENT_MODE_MAILBOX_KHR to avoid blocking eye rendering
-        Platform.sc.Acquire();
+        Platform.swapChain_.Acquire();
 
-        Platform.xferCmd.Reset();
-        Platform.xferCmd.Begin();
+        Platform.xferCmd_.Reset();
+        Platform.xferCmd_.Begin();
 
-        auto presentImage = Platform.sc.image[Platform.sc.renderImageIdx];
+        auto presentImage = Platform.swapChain_.image[Platform.swapChain_.renderImageIdx];
 
         // PRESENT_SRC_KHR -> TRANSFER_DST_OPTIMAL
         VkImageMemoryBarrier presentBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -628,7 +626,7 @@ static bool MainLoop(bool retryCreate)
         presentBarrier.subresourceRange.levelCount = 1;
         presentBarrier.subresourceRange.baseArrayLayer = 0;
         presentBarrier.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(Platform.xferCmd.buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+        vkCmdPipelineBarrier(Platform.xferCmd_.buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
             0, nullptr,
             0, nullptr,
             1, &presentBarrier);
@@ -652,7 +650,7 @@ static bool MainLoop(bool retryCreate)
             region.dstSubresource.layerCount = 1;
             region.dstOffsets[0] = { 0, 0, 0 };
             region.dstOffsets[1] = { windowSize.w, windowSize.h, 1 };
-            vkCmdBlitImage(Platform.xferCmd.buf, mirrorTexture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            vkCmdBlitImage(Platform.xferCmd_.buf, mirrorTexture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 presentImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_LINEAR);
         #else
             // Copy using xferCmd which has VK_QUEUE_TRANSFER_BIT set and can operate asynchronously to drawCmd
@@ -668,7 +666,7 @@ static bool MainLoop(bool retryCreate)
             region.dstSubresource.layerCount = 1;
             region.dstOffset = { 0, 0, 0 };
             region.extent = { (uint32_t)windowSize.w, (uint32_t)windowSize.h, 1 };
-            vkCmdCopyImage(Platform.xferCmd.buf,
+            vkCmdCopyImage(Platform.xferCmd_.buf,
                 mirrorTexture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 presentImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1, &region);
@@ -688,19 +686,19 @@ static bool MainLoop(bool retryCreate)
         presentBarrier.subresourceRange.levelCount = 1;
         presentBarrier.subresourceRange.baseArrayLayer = 0;
         presentBarrier.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(Platform.xferCmd.buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+        vkCmdPipelineBarrier(Platform.xferCmd_.buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
             0, nullptr,
             0, nullptr,
             1, &presentBarrier);
 
-        Platform.xferCmd.End();
+        Platform.xferCmd_.End();
 
-        Platform.xferCmd.Exec(Platform.xferQueue);
-        Platform.xferCmd.Wait();
+        Platform.xferCmd_.Exec(Platform.xferQueue_);
+        Platform.xferCmd_.Wait();
 
         // For now just block on Acquire's fence, could use a semaphore with e.g.:
         // Platform.sc.Present(Platform.xferQueue, Platform.xferDone);
-        Platform.sc.Present(Platform.xferQueue, VK_NULL_HANDLE);
+        Platform.swapChain_.Present(Platform.xferQueue_, VK_NULL_HANDLE);
 
         ++frameIndex;
     }

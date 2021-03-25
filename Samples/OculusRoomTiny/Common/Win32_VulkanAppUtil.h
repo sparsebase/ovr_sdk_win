@@ -303,24 +303,24 @@ public:
         HWND                            hWnd = NULL;
     #endif
 
-    bool                                Running;
-    KeyStore                            Key;
+    bool                                running_;
+    KeyStore                            key_;
 
-    VkInstance                          instance;
-    VkPhysicalDevice                    physicalDevice;
-    bool                                isAMD;
-    VkPhysicalDeviceLimits              deviceLimits;
-    VkPhysicalDeviceMemoryProperties    memProps;
-    VkDevice                            device;
-    VkQueue                             drawQueue;
-    VkQueue                             xferQueue;
-    VkSemaphore                         drawDone;
-    VkSemaphore                         xferDone;
-    VkExtent2D                          size;
-    std::array<CmdBuffer, Swapchain::maxImages> drawCmd;
-    int                                 currentDrawCmd;
-    CmdBuffer                           xferCmd;
-    Swapchain                           sc;
+    VkInstance                          instance_;
+    VkPhysicalDevice                    physicalDevice_;
+    bool                                isAMD_;
+    VkPhysicalDeviceLimits              deviceLimits_;
+    VkPhysicalDeviceMemoryProperties    memProps_;
+    VkDevice                            device_;
+    VkQueue                             drawQueue_;
+    VkQueue                             xferQueue_;
+    VkSemaphore                         drawSemaphor_;
+    VkSemaphore                         xferSemaphor_;
+    VkExtent2D                          size_;
+    std::array<CmdBuffer, Swapchain::maxImages> drawCmd_;
+    int                                 currentDrawCmd_;
+    CmdBuffer                           xferCmd_;
+    Swapchain                           swapChain_;
     struct found
     {
         std::string             gpuName;
@@ -329,7 +329,7 @@ public:
         uint32_t                xferQueueFamilyIndex;
         uint32_t                xferQueueIndex;
         uint32_t                heap;
-    } found;
+    } found_;
 
     #define LIST_VK_INSTANCE_PROCS(_) \
     _(vkGetPhysicalDeviceProperties2KHR) \
@@ -372,22 +372,22 @@ public:
     } api;
 
     Vulkan() :
-        instance(VK_NULL_HANDLE),
-        physicalDevice(VK_NULL_HANDLE),
-        isAMD(false),
-        deviceLimits{},
-        memProps{},
-        device(VK_NULL_HANDLE),
-        drawQueue(VK_NULL_HANDLE),
-        xferQueue(VK_NULL_HANDLE),
-        drawDone(VK_NULL_HANDLE),
-        xferDone(VK_NULL_HANDLE),
-        size({ 0, 0 }),
-        drawCmd(),
-        currentDrawCmd(0),
-        xferCmd(),
-        sc(),
-        found({ "(not found)" })
+        instance_(VK_NULL_HANDLE),
+        physicalDevice_(VK_NULL_HANDLE),
+        isAMD_(false),
+        deviceLimits_{},
+        memProps_{},
+        device_(VK_NULL_HANDLE),
+        drawQueue_(VK_NULL_HANDLE),
+        xferQueue_(VK_NULL_HANDLE),
+        drawSemaphor_(VK_NULL_HANDLE),
+        xferSemaphor_(VK_NULL_HANDLE),
+        size_({ 0, 0 }),
+        drawCmd_(),
+        currentDrawCmd_(0),
+        xferCmd_(),
+        swapChain_(),
+        found_({ "(not found)" })
     {
     }
 
@@ -399,20 +399,20 @@ public:
 
     CmdBuffer& CurrentDrawCmd()
     {
-        return drawCmd[currentDrawCmd];
+        return drawCmd_[currentDrawCmd_];
     }
 
     void NextDrawCmd()
     {
-        currentDrawCmd = (currentDrawCmd + 1) % drawCmd.size();
-        drawCmd[currentDrawCmd].Wait();
+        currentDrawCmd_ = (currentDrawCmd_ + 1) % drawCmd_.size();
+        drawCmd_[currentDrawCmd_].Wait();
     }
 
     void DumpVkPhysicalDevice() const
     {
         VkPhysicalDeviceIDPropertiesKHR gpuDevID{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR };
         VkPhysicalDeviceProperties2KHR gpuProps{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR, &gpuDevID };
-        api.vkGetPhysicalDeviceProperties2KHR(physicalDevice, &gpuProps);
+        api.vkGetPhysicalDeviceProperties2KHR(physicalDevice_, &gpuProps);
         std::string deviceType = "unknown";
         switch (gpuProps.properties.deviceType)
         {
@@ -427,7 +427,7 @@ public:
 
         VkQueueFamilyProperties queueFamilyProps[10];
         uint32_t queueFamilyCount = countof(queueFamilyProps);
-        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProps);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &queueFamilyCount, queueFamilyProps);
 
         for (uint32_t j = 0; j < queueFamilyCount; ++j)
         {
@@ -440,7 +440,7 @@ public:
         }
 
         VkPhysicalDeviceMemoryProperties mem_props{};
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &mem_props);
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &mem_props);
 
         Debug.Log("mem heaps=" + std::to_string(mem_props.memoryHeapCount) + " types=" + std::to_string(mem_props.memoryTypeCount));
         for (uint32_t j = 0; j < mem_props.memoryHeapCount; ++j)
@@ -470,7 +470,7 @@ public:
         }
 
         uint32_t devExtCount = countof(ext);
-        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &devExtCount, ext);
+        vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &devExtCount, ext);
         Debug.Log("Found " + std::to_string(devExtCount) + " device extensions:");
         for (uint32_t i = 0; i < devExtCount; ++i)
         {
@@ -484,20 +484,20 @@ public:
         switch (Msg)
         {
         case WM_KEYDOWN:
-            p->Key[wParam & 0xff] = true;
+            p->key_[wParam & 0xff] = true;
             break;
         case WM_KEYUP:
-            p->Key[wParam & 0xff] = false;
+            p->key_[wParam & 0xff] = false;
             break;
         case WM_DESTROY:
-            p->Running = false;
+            p->running_ = false;
             break;
         default:
             return DefWindowProcW(hWnd, Msg, wParam, lParam);
         }
-        if ((p->Key['Q'] && p->Key[VK_CONTROL]) || p->Key[VK_ESCAPE])
+        if ((p->key_['Q'] && p->key_[VK_CONTROL]) || p->key_[VK_ESCAPE])
         {
-            p->Running = false;
+            p->running_ = false;
         }
         return 0;
     }
@@ -505,7 +505,7 @@ public:
     bool InitWindow(HINSTANCE hInstance, LPCWSTR title)
     {
         hInst = hInstance;
-        Running = true;
+        running_ = true;
 
         #if defined(_WIN32)
             WNDCLASSW wc{};
@@ -672,20 +672,20 @@ public:
         return static_cast<Vulkan*>(pUserData)->debugReport(flags,objectType, object, location, messageCode, pLayerPrefix, pMessage);
     }
 
-    struct VrApi {
+    struct VRAPI {
         // Get the required Vulkan extensions for Vulkan instance creation
         std::function<bool(char* extensionNames, uint32_t* extensionNamesSize)> GetInstanceExtensionsVk;
         // Get the physical device corresponding to the VR session
-        std::function<bool(VkInstance instance, VkPhysicalDevice* physicalDevice)> GetSessionPhysicalDeviceVk;
+        std::function<bool(VkInstance instance_, VkPhysicalDevice* physicalDevice_)> GetSessionPhysicalDeviceVk;
         // Get the required Vulkan extensions for Vulkan device creation
         std::function<bool(char* extensionNames, uint32_t* extensionNamesSize)> GetDeviceExtensionsVk;
     };
 
-    bool InitDevice(const char* appName, int vpW, int vpH, const VrApi& vrApi, bool windowed = true)
+    bool InitDevice(const char* appName, int vpW, int vpH, const VRAPI& vrApi, bool windowed = true)
     {
-        size.width = vpW;
-        size.height = vpH;
-        Debug.Log("Viewport: " + std::to_string(size.width) + "x" + std::to_string(size.height));
+        size_.width = vpW;
+        size_.height = vpH;
+        Debug.Log("Viewport: " + std::to_string(size_.width) + "x" + std::to_string(size_.height));
 
         VkApplicationInfo appInfo{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
         appInfo.pApplicationName = appName;
@@ -779,9 +779,9 @@ public:
         // create instance & load instance extensions
         //
 
-        CHECKVK(vkCreateInstance(&instInfo, nullptr, &instance));
+        CHECKVK(vkCreateInstance(&instInfo, nullptr, &instance_));
 
-        CHECK(api.LoadInstanceProcs(instance));
+        CHECK(api.LoadInstanceProcs(instance_));
 
         VkDebugReportCallbackCreateInfoEXT debugInfo = { VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT };
         debugInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
@@ -793,90 +793,90 @@ public:
         #endif
         debugInfo.pfnCallback = debugReportThunk;
         debugInfo.pUserData = this;
-        CHECKVK(api.vkCreateDebugReportCallbackEXT(instance, &debugInfo, nullptr, &debugReporter));
+        CHECKVK(api.vkCreateDebugReportCallbackEXT(instance_, &debugInfo, nullptr, &debugReporter));
 
         //
         // enumerate devices
         //
 
-        if (!vrApi.GetSessionPhysicalDeviceVk(instance, &physicalDevice))
+        if (!vrApi.GetSessionPhysicalDeviceVk(instance_, &physicalDevice_))
         {
             Release();
             return false;
         }
 
         VkPhysicalDeviceProperties devProps{};
-        vkGetPhysicalDeviceProperties(physicalDevice, &devProps);
-        deviceLimits = devProps.limits;
+        vkGetPhysicalDeviceProperties(physicalDevice_, &devProps);
+        deviceLimits_ = devProps.limits;
 
         DumpVkPhysicalDevice();
 
         VkPhysicalDeviceProperties gpuProps = {};
-        vkGetPhysicalDeviceProperties(physicalDevice, &gpuProps);
-        found.gpuName = gpuProps.deviceName;
+        vkGetPhysicalDeviceProperties(physicalDevice_, &gpuProps);
+        found_.gpuName = gpuProps.deviceName;
         // To be cleaned up when a common interop is specified
         static const uint32_t AMDVendorId = 0x1002;
-        isAMD = (gpuProps.vendorID == AMDVendorId);
+        isAMD_ = (gpuProps.vendorID == AMDVendorId);
 
-        CHECK(sc.Init());
+        CHECK(swapChain_.Init());
 
         VkQueueFamilyProperties queueFamilyProps[10];
         uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &queueFamilyCount, nullptr);
         assert(queueFamilyCount < countof(queueFamilyProps));
-        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProps);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &queueFamilyCount, queueFamilyProps);
 
-        found.drawQueueFamilyIndex = found.xferQueueFamilyIndex = queueFamilyCount;
+        found_.drawQueueFamilyIndex = found_.xferQueueFamilyIndex = queueFamilyCount;
 
         for (uint32_t i = 0; i < queueFamilyCount; ++i)
         {
             VkBool32 presentable = false;
-            CHECKVK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, sc.surface, &presentable));
+            CHECKVK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice_, i, swapChain_.surface, &presentable));
             // Only need graphics (not presentation) for draw queue
             if (queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-                found.drawQueueFamilyIndex = i;
+                found_.drawQueueFamilyIndex = i;
             // Only need to vkCmdCopyImage on the xfer queue
             if (presentable && (queueFamilyProps[i].queueFlags & VK_QUEUE_TRANSFER_BIT))
             {
-                found.xferQueueFamilyIndex = i;
+                found_.xferQueueFamilyIndex = i;
             }
         }
 
-        CHECK(found.drawQueueFamilyIndex < queueFamilyCount);
-        CHECK(found.xferQueueFamilyIndex < queueFamilyCount);
+        CHECK(found_.drawQueueFamilyIndex < queueFamilyCount);
+        CHECK(found_.xferQueueFamilyIndex < queueFamilyCount);
 
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &memProps_);
 
-        for (found.heap = 0; found.heap < memProps.memoryHeapCount; ++found.heap)
+        for (found_.heap = 0; found_.heap < memProps_.memoryHeapCount; ++found_.heap)
         {
-            if (memProps.memoryHeaps[found.heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+            if (memProps_.memoryHeaps[found_.heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
                 break;
         }
 
-        CHECK(found.heap < memProps.memoryHeapCount);
+        CHECK(found_.heap < memProps_.memoryHeapCount);
 
         VkDeviceQueueCreateInfo queueInfo[2] = { { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO }, { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO } };
         VkDeviceCreateInfo deviceInfo{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
         float queuePriorities[] = { 1, 0 };
 
-        if (found.drawQueueFamilyIndex == found.xferQueueFamilyIndex)
+        if (found_.drawQueueFamilyIndex == found_.xferQueueFamilyIndex)
         {
-            CHECK(queueFamilyProps[found.xferQueueFamilyIndex].queueCount >= 2);
-            found.drawQueueIndex = 0;
-            found.xferQueueIndex = 1;
+            CHECK(queueFamilyProps[found_.xferQueueFamilyIndex].queueCount >= 2);
+            found_.drawQueueIndex = 0;
+            found_.xferQueueIndex = 1;
             queueInfo[0].queueCount = 2;
-            queueInfo[0].queueFamilyIndex = found.drawQueueFamilyIndex;
+            queueInfo[0].queueFamilyIndex = found_.drawQueueFamilyIndex;
             queueInfo[0].pQueuePriorities = queuePriorities;
             deviceInfo.queueCreateInfoCount = 1;
         }
         else
         {
-            found.drawQueueIndex = found.xferQueueIndex = 0;
+            found_.drawQueueIndex = found_.xferQueueIndex = 0;
             queueInfo[0].queueCount = 1;
-            queueInfo[0].queueFamilyIndex = found.drawQueueFamilyIndex;
+            queueInfo[0].queueFamilyIndex = found_.drawQueueFamilyIndex;
             queueInfo[0].pQueuePriorities = &queuePriorities[0];
             queueInfo[1].queueCount = 1;
-            queueInfo[1].queueFamilyIndex = found.xferQueueFamilyIndex;
+            queueInfo[1].queueFamilyIndex = found_.xferQueueFamilyIndex;
             queueInfo[1].pQueuePriorities = &queuePriorities[1];
             deviceInfo.queueCreateInfoCount = countof(queueInfo);
         }
@@ -904,77 +904,77 @@ public:
         features.shaderStorageImageMultisample = VK_TRUE;
         deviceInfo.pEnabledFeatures = &features;
 
-        Debug.Log("Creating device " + found.gpuName);
-        CHECKVK(vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device));
+        Debug.Log("Creating device " + found_.gpuName);
+        CHECKVK(vkCreateDevice(physicalDevice_, &deviceInfo, nullptr, &device_));
 
-        if (!isAMD)
+        if (!isAMD_)
         {
-            CHECK(api.LoadDeviceProcs(device));
+            CHECK(api.LoadDeviceProcs(device_));
         }
 
-        vkGetDeviceQueue(device, found.drawQueueFamilyIndex, found.drawQueueIndex, &drawQueue);
-        vkGetDeviceQueue(device, found.xferQueueFamilyIndex, found.xferQueueIndex, &xferQueue);
+        vkGetDeviceQueue(device_, found_.drawQueueFamilyIndex, found_.drawQueueIndex, &drawQueue_);
+        vkGetDeviceQueue(device_, found_.xferQueueFamilyIndex, found_.xferQueueIndex, &xferQueue_);
 
         // Semaphore to block on draw complete
         VkSemaphoreCreateInfo semInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
-        CHECKVK(vkCreateSemaphore(device, &semInfo, nullptr, &drawDone));
+        CHECKVK(vkCreateSemaphore(device_, &semInfo, nullptr, &drawSemaphor_));
         // Semaphore to block on xfer complete
-        CHECKVK(vkCreateSemaphore(device, &semInfo, nullptr, &xferDone));
+        CHECKVK(vkCreateSemaphore(device_, &semInfo, nullptr, &xferSemaphor_));
 
-        for (auto& cmd: drawCmd)
+        for (auto& cmd: drawCmd_)
         {
-            CHECK(cmd.Init(found.drawQueueFamilyIndex));
+            CHECK(cmd.Init(found_.drawQueueFamilyIndex));
         }
-        CHECK(xferCmd.Init(found.xferQueueFamilyIndex));
+        CHECK(xferCmd_.Init(found_.xferQueueFamilyIndex));
 
-        CHECK(sc.Create());
+        CHECK(swapChain_.Create());
 
         return true;
     }
 
     void ReleaseDevice()
     {
-        for (auto& cmd: drawCmd)
+        for (auto& cmd: drawCmd_)
             cmd.Release();
-        xferCmd.Release();
-        sc.Release();
-        if (device)
+        xferCmd_.Release();
+        swapChain_.Release();
+        if (device_)
         {
-            if (drawDone) vkDestroySemaphore(device, drawDone, nullptr);
-            if (xferDone) vkDestroySemaphore(device, xferDone, nullptr);
-            vkDestroyDevice(device, nullptr);
+            if (drawSemaphor_) vkDestroySemaphore(device_, drawSemaphor_, nullptr);
+            if (xferSemaphor_) vkDestroySemaphore(device_, xferSemaphor_, nullptr);
+            vkDestroyDevice(device_, nullptr);
         }
-        if (instance)
+        if (instance_)
         {
             if (debugReporter)
             {
-                api.vkDestroyDebugReportCallbackEXT(instance, debugReporter, nullptr);
+                api.vkDestroyDebugReportCallbackEXT(instance_, debugReporter, nullptr);
                 debugReporter = VK_NULL_HANDLE;
             }
-            vkDestroyInstance(instance, nullptr);
+            vkDestroyInstance(instance_, nullptr);
         }
-        drawDone = VK_NULL_HANDLE;
-        xferDone = VK_NULL_HANDLE;
-        drawQueue = VK_NULL_HANDLE;
-        xferQueue = VK_NULL_HANDLE;
-        device = VK_NULL_HANDLE;
-        instance = VK_NULL_HANDLE;
+        drawSemaphor_ = VK_NULL_HANDLE;
+        xferSemaphor_ = VK_NULL_HANDLE;
+        drawQueue_ = VK_NULL_HANDLE;
+        xferQueue_ = VK_NULL_HANDLE;
+        device_ = VK_NULL_HANDLE;
+        instance_ = VK_NULL_HANDLE;
     }
 
     VkResult AllocateMemory(VkMemoryRequirements const& memReqs, VkDeviceMemory* mem, VkFlags flags = 0, const void* pNext = nullptr) const
     {
         // Search memtypes to find first index with those properties
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i)
+        for (uint32_t i = 0; i < memProps_.memoryTypeCount; ++i)
         {
             if (memReqs.memoryTypeBits & (1 << i))
             {
                 // Type is available, does it match user properties?
-                if ((memProps.memoryTypes[i].propertyFlags & flags) == flags)
+                if ((memProps_.memoryTypes[i].propertyFlags & flags) == flags)
                 {
                     VkMemoryAllocateInfo memAlloc = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, pNext };
                     memAlloc.allocationSize = memReqs.size;
                     memAlloc.memoryTypeIndex = i;
-                    return vkAllocateMemory(device, &memAlloc, nullptr, mem);
+                    return vkAllocateMemory(device_, &memAlloc, nullptr, mem);
                 }
             }
         }
@@ -985,14 +985,14 @@ public:
     VkResult AllocateBufferMemory(VkBuffer buf, VkDeviceMemory* mem, VkFlags flags = 0) const
     {
         VkMemoryRequirements memReq = {};
-        vkGetBufferMemoryRequirements(device, buf, &memReq);
+        vkGetBufferMemoryRequirements(device_, buf, &memReq);
         return AllocateMemory(memReq, mem, flags);
     }
 
     VkResult AllocateImageMemory(VkImage img, VkDeviceMemory* mem, VkFlags flags = 0) const
     {
         VkMemoryRequirements memReq = {};
-        vkGetImageMemoryRequirements(device, img, &memReq);
+        vkGetImageMemoryRequirements(device_, img, &memReq);
         return AllocateMemory(memReq, mem, flags);
     }
 
@@ -1004,7 +1004,7 @@ public:
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        return Running;
+        return running_;
     }
 
     void Run(bool (*MainLoop)(bool retryCreate))
@@ -1032,7 +1032,7 @@ bool Swapchain::Init()
         create_info.flags = 0;
         create_info.hinstance = Platform.hInst;
         create_info.hwnd = Platform.hWnd;
-        CHECKVK(vkCreateWin32SurfaceKHR(Platform.instance, &create_info, nullptr, &surface));
+        CHECKVK(vkCreateWin32SurfaceKHR(Platform.instance_, &create_info, nullptr, &surface));
     #else
         #error CreateSurface not supported on this OS
     #endif // defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -1043,14 +1043,14 @@ bool Swapchain::Init()
 bool Swapchain::Create()
 {
     VkSurfaceCapabilitiesKHR surfCaps;
-    CHECKVK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Platform.physicalDevice, surface, &surfCaps));
+    CHECKVK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Platform.physicalDevice_, surface, &surfCaps));
     CHECK(surfCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
     VkSurfaceFormatKHR surfFmts[100];
     uint32_t surfFmtCount = 0;
-    CHECKVK(vkGetPhysicalDeviceSurfaceFormatsKHR(Platform.physicalDevice, surface, &surfFmtCount, nullptr));
+    CHECKVK(vkGetPhysicalDeviceSurfaceFormatsKHR(Platform.physicalDevice_, surface, &surfFmtCount, nullptr));
     assert(surfFmtCount < countof(surfFmts));
-    CHECKVK(vkGetPhysicalDeviceSurfaceFormatsKHR(Platform.physicalDevice, surface, &surfFmtCount, surfFmts));
+    CHECKVK(vkGetPhysicalDeviceSurfaceFormatsKHR(Platform.physicalDevice_, surface, &surfFmtCount, surfFmts));
     uint32_t foundFmt;
     for (foundFmt = 0; foundFmt < surfFmtCount; ++foundFmt)
     {
@@ -1062,9 +1062,9 @@ bool Swapchain::Create()
 
     VkPresentModeKHR presentModes[10];
     uint32_t presentModeCount = 0;
-    CHECKVK(vkGetPhysicalDeviceSurfacePresentModesKHR(Platform.physicalDevice, surface, &presentModeCount, nullptr));
+    CHECKVK(vkGetPhysicalDeviceSurfacePresentModesKHR(Platform.physicalDevice_, surface, &presentModeCount, nullptr));
     assert(presentModeCount < countof(presentModes));
-    CHECKVK(vkGetPhysicalDeviceSurfacePresentModesKHR(Platform.physicalDevice, surface, &presentModeCount, presentModes));
+    CHECKVK(vkGetPhysicalDeviceSurfacePresentModesKHR(Platform.physicalDevice_, surface, &presentModeCount, presentModes));
 
     // Do not use VSYNC for the mirror window, but Nvidia doesn't support IMMEDIATE so fall back to MAILBOX
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
@@ -1083,7 +1083,7 @@ bool Swapchain::Create()
     swapchainInfo.minImageCount = surfCaps.minImageCount;
     swapchainInfo.imageFormat = format;
     swapchainInfo.imageColorSpace = surfFmts[foundFmt].colorSpace;
-    swapchainInfo.imageExtent = Platform.size;
+    swapchainInfo.imageExtent = Platform.size_;
     swapchainInfo.imageArrayLayers = 1;
     swapchainInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1094,16 +1094,16 @@ bool Swapchain::Create()
     swapchainInfo.presentMode = presentMode;
     swapchainInfo.clipped = true;
     swapchainInfo.oldSwapchain = VK_NULL_HANDLE;
-    CHECKVK(vkCreateSwapchainKHR(Platform.device, &swapchainInfo, nullptr, &swapchain));
+    CHECKVK(vkCreateSwapchainKHR(Platform.device_, &swapchainInfo, nullptr, &swapchain));
 
     // Fence to throttle host on acquire
     VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-    CHECKVK(vkCreateFence(Platform.device, &fenceInfo, nullptr, &readyFence));
+    CHECKVK(vkCreateFence(Platform.device_, &fenceInfo, nullptr, &readyFence));
 
     swapchainCount = 0;
-    CHECKVK(vkGetSwapchainImagesKHR(Platform.device, swapchain, &swapchainCount, nullptr));
+    CHECKVK(vkGetSwapchainImagesKHR(Platform.device_, swapchain, &swapchainCount, nullptr));
     assert(swapchainCount < countof(image));
-    CHECKVK(vkGetSwapchainImagesKHR(Platform.device, swapchain, &swapchainCount, image));
+    CHECKVK(vkGetSwapchainImagesKHR(Platform.device_, swapchain, &swapchainCount, image));
     if (swapchainCount > maxImages)
     {
         Debug.Log("Reducing swapchain length from " + std::to_string(swapchainCount) + " to " + std::to_string(maxImages));
@@ -1136,9 +1136,9 @@ bool Swapchain::Wait()
     if (presentFence)
     {
         // Wait for the fence...
-        CHECKVK(vkWaitForFences(Platform.device, 1, &presentFence, VK_TRUE, UINT64_MAX));
+        CHECKVK(vkWaitForFences(Platform.device_, 1, &presentFence, VK_TRUE, UINT64_MAX));
         // ...then reset the fence for future Acquire calls
-        CHECKVK(vkResetFences(Platform.device, 1, &presentFence));
+        CHECKVK(vkResetFences(Platform.device_, 1, &presentFence));
         presentFence = VK_NULL_HANDLE;
     }
 
@@ -1155,7 +1155,7 @@ bool Swapchain::Acquire(VkSemaphore readySemaphore)
         presentFence = readyFence;
     }
 
-    lastResult = vkAcquireNextImageKHR(Platform.device, swapchain, UINT64_MAX, readySemaphore, presentFence, &renderImageIdx);
+    lastResult = vkAcquireNextImageKHR(Platform.device_, swapchain, UINT64_MAX, readySemaphore, presentFence, &renderImageIdx);
     if (lastResult != VK_SUCCESS)
         return Recreate();
 
@@ -1207,7 +1207,7 @@ bool Swapchain::Recreate()
     // Here we just check that we've still got a presentably queue family, if we lose the device we tear everything down so this should
     // always be true.
     VkBool32 presentable = false;
-    CHECKVK(vkGetPhysicalDeviceSurfaceSupportKHR(Platform.physicalDevice, Platform.found.drawQueueFamilyIndex, surface, &presentable));
+    CHECKVK(vkGetPhysicalDeviceSurfaceSupportKHR(Platform.physicalDevice_, Platform.found_.drawQueueFamilyIndex, surface, &presentable));
     if (!presentable)
     {
         Debug.Log("Swapchain recreated but not presentable");
@@ -1221,27 +1221,27 @@ bool Swapchain::Recreate()
 
     // Transition the swapchain surface from UNDEFINED to PRESENTABLE so the main loop doesn't trigger validation warnings
     bool prepared = true;
-    prepared &= Platform.xferCmd.Reset();
-    prepared &= Platform.xferCmd.Begin();
-    Prepare(Platform.xferCmd.buf);
-    prepared &= Platform.xferCmd.End();
-    prepared &= Platform.xferCmd.Exec(Platform.xferQueue);
-    prepared &= Platform.xferCmd.Wait();
+    prepared &= Platform.xferCmd_.Reset();
+    prepared &= Platform.xferCmd_.Begin();
+    Prepare(Platform.xferCmd_.buf);
+    prepared &= Platform.xferCmd_.End();
+    prepared &= Platform.xferCmd_.Exec(Platform.xferQueue_);
+    prepared &= Platform.xferCmd_.Wait();
 
     return prepared;
 }
 
 void Swapchain::Release()
 {
-    if (Platform.device)
+    if (Platform.device_)
     {
         // Flush any pending Present() calls which are using the fence
         Wait();
-        if (swapchain) vkDestroySwapchainKHR(Platform.device, swapchain, nullptr);
-        if (readyFence) vkDestroyFence(Platform.device, readyFence, nullptr);
+        if (swapchain) vkDestroySwapchainKHR(Platform.device_, swapchain, nullptr);
+        if (readyFence) vkDestroyFence(Platform.device_, readyFence, nullptr);
     }
 
-    if (Platform.instance && surface) vkDestroySurfaceKHR(Platform.instance, surface, nullptr);
+    if (Platform.instance_ && surface) vkDestroySurfaceKHR(Platform.instance_, surface, nullptr);
 
     readyFence = VK_NULL_HANDLE;
     presentFence = VK_NULL_HANDLE;
@@ -1263,17 +1263,17 @@ bool CmdBuffer::Init(uint32_t queueFamilyIndex)
     VkCommandPoolCreateInfo cmdPoolInfo{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     cmdPoolInfo.queueFamilyIndex = queueFamilyIndex;
-    CHECKVK(vkCreateCommandPool(Platform.device, &cmdPoolInfo, nullptr, &pool));
+    CHECKVK(vkCreateCommandPool(Platform.device_, &cmdPoolInfo, nullptr, &pool));
 
     // Create the command buffer from the command pool
     VkCommandBufferAllocateInfo cmd{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
     cmd.commandPool = pool;
     cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmd.commandBufferCount = 1;
-    CHECKVK(vkAllocateCommandBuffers(Platform.device, &cmd, &buf));
+    CHECKVK(vkAllocateCommandBuffers(Platform.device_, &cmd, &buf));
 
     VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
-    CHECKVK(vkCreateFence(Platform.device, &fenceInfo, nullptr, &execFence));
+    CHECKVK(vkCreateFence(Platform.device_, &fenceInfo, nullptr, &execFence));
 
     SetState(CmdBufferState::Initialized);
     return true;
@@ -1326,7 +1326,7 @@ bool CmdBuffer::Wait()
     const uint32_t timeoutNs = 1 * 1000 * 1000 * 1000;
     for (int i = 0; i < 5; ++i)
     {
-        lastResult = vkWaitForFences(Platform.device, 1, &execFence, VK_TRUE, timeoutNs);
+        lastResult = vkWaitForFences(Platform.device_, 1, &execFence, VK_TRUE, timeoutNs);
         if (lastResult == VK_SUCCESS)
         {
             // Buffer can be executed multiple times...
@@ -1345,7 +1345,7 @@ bool CmdBuffer::Reset()
     {
         CHECKCBSTATE(CmdBufferState::Executable);
 
-        CHECKVK(vkResetFences(Platform.device, 1, &execFence));
+        CHECKVK(vkResetFences(Platform.device_, 1, &execFence));
         CHECKVK(vkResetCommandBuffer(buf, 0));
 
         SetState(CmdBufferState::Initialized);
@@ -1356,11 +1356,11 @@ bool CmdBuffer::Reset()
 
 void CmdBuffer::Release()
 {
-    if (Platform.device)
+    if (Platform.device_)
     {
-        if (buf) vkFreeCommandBuffers(Platform.device, pool, 1, &buf);
-        if (pool) vkDestroyCommandPool(Platform.device, pool, nullptr);
-        if (execFence) vkDestroyFence(Platform.device, execFence, nullptr);
+        if (buf) vkFreeCommandBuffers(Platform.device_, pool, 1, &buf);
+        if (pool) vkDestroyCommandPool(Platform.device_, pool, nullptr);
+        if (execFence) vkDestroyFence(Platform.device_, execFence, nullptr);
     }
     SetState(CmdBufferState::Undefined);
     buf = nullptr;
@@ -1434,16 +1434,16 @@ public:
             subpass.pDepthStencilAttachment = &depthRef;
         }
 
-        CHECKVK(vkCreateRenderPass(Platform.device, &rpInfo, nullptr, &pass));
+        CHECKVK(vkCreateRenderPass(Platform.device_, &rpInfo, nullptr, &pass));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (pass) vkDestroyRenderPass(Platform.device, pass, nullptr);
+            if (pass) vkDestroyRenderPass(Platform.device_, pass, nullptr);
         }
         pass = VK_NULL_HANDLE;
     }
@@ -1471,10 +1471,10 @@ public:
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (buf) vkDestroyBuffer(Platform.device, buf, nullptr);
-            if (mem) vkFreeMemory(Platform.device, mem, nullptr);
+            if (buf) vkDestroyBuffer(Platform.device_, buf, nullptr);
+            if (mem) vkFreeMemory(Platform.device_, mem, nullptr);
         }
         buf = VK_NULL_HANDLE;
         mem = VK_NULL_HANDLE;
@@ -1491,11 +1491,11 @@ public:
         VkBufferCreateInfo bufInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         bufInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         bufInfo.size = sizeof(T);
-        CHECKVK(vkCreateBuffer(Platform.device, &bufInfo, nullptr, &buf));
+        CHECKVK(vkCreateBuffer(Platform.device_, &bufInfo, nullptr, &buf));
 
         CHECKVK(Platform.AllocateBufferMemory(buf, &mem, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
 
-        CHECKVK(vkBindBufferMemory(Platform.device, buf, mem, 0));
+        CHECKVK(vkBindBufferMemory(Platform.device_, buf, mem, 0));
 
         descInfo.buffer = buf;
         descInfo.offset = 0;
@@ -1507,9 +1507,9 @@ public:
     bool Update(const T& data)
     {
         T* map = nullptr;
-        CHECKVK(vkMapMemory(Platform.device, mem, 0, sizeof(T), 0, (void **)&map));
+        CHECKVK(vkMapMemory(Platform.device_, mem, 0, sizeof(T), 0, (void **)&map));
         *map = data;
-        CHECKVK(vkUnmapMemory(Platform.device, mem));
+        CHECKVK(vkUnmapMemory(Platform.device_, mem));
 
         return true;
     }
@@ -1545,12 +1545,12 @@ public:
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (idxBuf) vkDestroyBuffer(Platform.device, idxBuf, nullptr);
-            if (idxMem) vkFreeMemory(Platform.device, idxMem, nullptr);
-            if (vtxBuf) vkDestroyBuffer(Platform.device, vtxBuf, nullptr);
-            if (vtxMem) vkFreeMemory(Platform.device, vtxMem, nullptr);
+            if (idxBuf) vkDestroyBuffer(Platform.device_, idxBuf, nullptr);
+            if (idxMem) vkFreeMemory(Platform.device_, idxMem, nullptr);
+            if (vtxBuf) vkDestroyBuffer(Platform.device_, vtxBuf, nullptr);
+            if (vtxMem) vkFreeMemory(Platform.device_, vtxMem, nullptr);
         }
         idxBuf = VK_NULL_HANDLE;
         idxMem = VK_NULL_HANDLE;
@@ -1570,15 +1570,15 @@ public:
         VkBufferCreateInfo bufInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         bufInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
         bufInfo.size = sizeof(uint16_t) * idxCount;
-        CHECKVK(vkCreateBuffer(Platform.device, &bufInfo, nullptr, &idxBuf));
+        CHECKVK(vkCreateBuffer(Platform.device_, &bufInfo, nullptr, &idxBuf));
         CHECKVK(Platform.AllocateBufferMemory(idxBuf, &idxMem, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
-        CHECKVK(vkBindBufferMemory(Platform.device, idxBuf, idxMem, 0));
+        CHECKVK(vkBindBufferMemory(Platform.device_, idxBuf, idxMem, 0));
 
         bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         bufInfo.size = sizeof(T) * vtxCount;
-        CHECKVK(vkCreateBuffer(Platform.device, &bufInfo, nullptr, &vtxBuf));
+        CHECKVK(vkCreateBuffer(Platform.device_, &bufInfo, nullptr, &vtxBuf));
         CHECKVK(Platform.AllocateBufferMemory(vtxBuf, &vtxMem, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
-        CHECKVK(vkBindBufferMemory(Platform.device, vtxBuf, vtxMem, 0));
+        CHECKVK(vkBindBufferMemory(Platform.device_, vtxBuf, vtxMem, 0));
 
         bindDesc.binding = 0;
         bindDesc.stride = sizeof(T);
@@ -1590,10 +1590,10 @@ public:
     bool UpdateIndicies(const uint16_t* data, uint32_t count, uint32_t offset = 0)
     {
         uint16_t* map = nullptr;
-        CHECKVK(vkMapMemory(Platform.device, idxMem, sizeof(map[0]) * offset, sizeof(map[0]) * count, 0, (void **)&map));
+        CHECKVK(vkMapMemory(Platform.device_, idxMem, sizeof(map[0]) * offset, sizeof(map[0]) * count, 0, (void **)&map));
         for (size_t i = 0; i < count; ++i)
             map[i] = data[i];
-        vkUnmapMemory(Platform.device, idxMem);
+        vkUnmapMemory(Platform.device_, idxMem);
 
         return true;
     }
@@ -1601,10 +1601,10 @@ public:
     bool UpdateVertexes(const T* data, uint32_t count, uint32_t offset = 0)
     {
         T* map = nullptr;
-        CHECKVK(vkMapMemory(Platform.device, vtxMem, sizeof(map[0]) * offset, sizeof(map[0]) * count, 0, (void **)&map));
+        CHECKVK(vkMapMemory(Platform.device_, vtxMem, sizeof(map[0]) * offset, sizeof(map[0]) * count, 0, (void **)&map));
         for (size_t i = 0; i < count; ++i)
             map[i] = data[i];
-        vkUnmapMemory(Platform.device, vtxMem);
+        vkUnmapMemory(Platform.device_, vtxMem);
 
         return true;
     }
@@ -1698,21 +1698,21 @@ public:
         imgInfo.tiling = VK_IMAGE_TILING_LINEAR;
         imgInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-        CHECKVK(vkCreateImage(Platform.device, &imgInfo, nullptr, &staging.img));
+        CHECKVK(vkCreateImage(Platform.device_, &imgInfo, nullptr, &staging.img));
 
         CHECKVK(Platform.AllocateImageMemory(staging.img, &staging.mem, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT));
 
-        CHECKVK(vkBindImageMemory(Platform.device, staging.img, staging.mem, 0));
+        CHECKVK(vkBindImageMemory(Platform.device_, staging.img, staging.mem, 0));
 
         VkImageSubresource imgSubRes = {};
         imgSubRes.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         imgSubRes.mipLevel = 0;
         imgSubRes.arrayLayer = 0;
         VkSubresourceLayout layout = {};
-        vkGetImageSubresourceLayout(Platform.device, staging.img, &imgSubRes, &layout);
+        vkGetImageSubresourceLayout(Platform.device_, staging.img, &imgSubRes, &layout);
 
         uint8_t* data = nullptr;
-        CHECKVK(vkMapMemory(Platform.device, staging.mem, layout.offset, layout.size, 0, (void**)&data));
+        CHECKVK(vkMapMemory(Platform.device_, staging.mem, layout.offset, layout.size, 0, (void**)&data));
 
         // Generate mip level 0 texture on the CPU
         std::function<uint32_t(uint32_t x, uint32_t y)> f;
@@ -1760,7 +1760,7 @@ public:
             }
         }
 
-        vkUnmapMemory(Platform.device, staging.mem);
+        vkUnmapMemory(Platform.device_, staging.mem);
 
         // Create the device-local image
 
@@ -1769,11 +1769,11 @@ public:
         imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imgInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        CHECKVK(vkCreateImage(Platform.device, &imgInfo, nullptr, &img));
+        CHECKVK(vkCreateImage(Platform.device_, &imgInfo, nullptr, &img));
 
         CHECKVK(Platform.AllocateImageMemory(img, &mem, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT));
 
-        CHECKVK(vkBindImageMemory(Platform.device, img, mem, 0));
+        CHECKVK(vkBindImageMemory(Platform.device_, img, mem, 0));
 
         VkImageBlit blit =
         {
@@ -1838,20 +1838,20 @@ public:
         viewInfo.subresourceRange.levelCount = imgInfo.mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
-        CHECKVK(vkCreateImageView(Platform.device, &viewInfo, nullptr, &view));
+        CHECKVK(vkCreateImageView(Platform.device_, &viewInfo, nullptr, &view));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (staging.img) vkDestroyImage(Platform.device, staging.img, nullptr);
-            if (staging.mem) vkFreeMemory(Platform.device, staging.mem, nullptr);
-            if (view) vkDestroyImageView(Platform.device, view, nullptr);
-            if (img) vkDestroyImage(Platform.device, img, nullptr);
-            if (mem) vkFreeMemory(Platform.device, mem, nullptr);
+            if (staging.img) vkDestroyImage(Platform.device_, staging.img, nullptr);
+            if (staging.mem) vkFreeMemory(Platform.device_, staging.mem, nullptr);
+            if (view) vkDestroyImageView(Platform.device_, view, nullptr);
+            if (img) vkDestroyImage(Platform.device_, img, nullptr);
+            if (mem) vkFreeMemory(Platform.device_, mem, nullptr);
         }
         staging.img = VK_NULL_HANDLE;
         staging.mem = VK_NULL_HANDLE;
@@ -1891,11 +1891,11 @@ public:
         imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imgInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        CHECKVK(vkCreateImage(Platform.device, &imgInfo, nullptr, &img));
+        CHECKVK(vkCreateImage(Platform.device_, &imgInfo, nullptr, &img));
 
         CHECKVK(Platform.AllocateImageMemory(img, &mem));
 
-        CHECKVK(vkBindImageMemory(Platform.device, img, mem, 0));
+        CHECKVK(vkBindImageMemory(Platform.device_, img, mem, 0));
 
         VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
         viewInfo.image = img;
@@ -1911,18 +1911,18 @@ public:
         viewInfo.subresourceRange.layerCount = 1;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.flags = 0;
-        CHECKVK(vkCreateImageView(Platform.device, &viewInfo, nullptr, &view));
+        CHECKVK(vkCreateImageView(Platform.device_, &viewInfo, nullptr, &view));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (view) vkDestroyImageView(Platform.device, view, nullptr);
-            if (img) vkDestroyImage(Platform.device, img, nullptr);
-            if (mem) vkFreeMemory(Platform.device, mem, nullptr);
+            if (view) vkDestroyImageView(Platform.device_, view, nullptr);
+            if (img) vkDestroyImage(Platform.device_, img, nullptr);
+            if (mem) vkFreeMemory(Platform.device_, mem, nullptr);
         }
         view = VK_NULL_HANDLE;
         img = VK_NULL_HANDLE;
@@ -1952,23 +1952,23 @@ public:
         samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerCreateInfo.mipLodBias = 0.0f;
         samplerCreateInfo.anisotropyEnable = VK_TRUE;
-        samplerCreateInfo.maxAnisotropy = Platform.deviceLimits.maxSamplerAnisotropy;
+        samplerCreateInfo.maxAnisotropy = Platform.deviceLimits_.maxSamplerAnisotropy;
         samplerCreateInfo.compareEnable = VK_FALSE;
         samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
         samplerCreateInfo.minLod = 0.0f;
         samplerCreateInfo.maxLod = 99.0f;
         samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
         samplerCreateInfo.unnormalizedCoordinates = VK_FALSE;
-        CHECKVK(vkCreateSampler(Platform.device, &samplerCreateInfo, nullptr, &sampler));
+        CHECKVK(vkCreateSampler(Platform.device_, &samplerCreateInfo, nullptr, &sampler));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            vkDestroySampler(Platform.device, sampler, nullptr);
+            vkDestroySampler(Platform.device_, sampler, nullptr);
         }
         sampler = VK_NULL_HANDLE;
     }
@@ -2004,7 +2004,7 @@ public:
 
         CHECKMSG((modInfo.codeSize > 0) && modInfo.pCode, "Invalid shader " + std::string(name));
 
-        CHECKVK(vkCreateShaderModule(Platform.device, &modInfo, nullptr, module));
+        CHECKVK(vkCreateShaderModule(Platform.device_, &modInfo, nullptr, module));
 
         return true;
     }
@@ -2037,10 +2037,10 @@ public:
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (shaderInfo[0].module) vkDestroyShaderModule(Platform.device, shaderInfo[0].module, nullptr);
-            if (shaderInfo[1].module) vkDestroyShaderModule(Platform.device, shaderInfo[1].module, nullptr);
+            if (shaderInfo[0].module) vkDestroyShaderModule(Platform.device_, shaderInfo[0].module, nullptr);
+            if (shaderInfo[1].module) vkDestroyShaderModule(Platform.device_, shaderInfo[1].module, nullptr);
         }
         shaderInfo[0].module = VK_NULL_HANDLE;
         shaderInfo[1].module = VK_NULL_HANDLE;
@@ -2075,16 +2075,16 @@ public:
         fbInfo.width = extent.width;
         fbInfo.height = extent.height;
         fbInfo.layers = 1;
-        CHECKVK(vkCreateFramebuffer(Platform.device, &fbInfo, nullptr, &fb));
+        CHECKVK(vkCreateFramebuffer(Platform.device_, &fbInfo, nullptr, &fb));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (fb) vkDestroyFramebuffer(Platform.device, fb, nullptr);
+            if (fb) vkDestroyFramebuffer(Platform.device_, fb, nullptr);
         }
         fb = VK_NULL_HANDLE;
     }
@@ -2121,7 +2121,7 @@ public:
         VkDescriptorSetLayoutCreateInfo descLayoutInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
         descLayoutInfo.bindingCount = 1;
         descLayoutInfo.pBindings = &db;
-        CHECKVK(vkCreateDescriptorSetLayout(Platform.device, &descLayoutInfo, nullptr, &descLayout));
+        CHECKVK(vkCreateDescriptorSetLayout(Platform.device_, &descLayoutInfo, nullptr, &descLayout));
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
         pipelineLayoutCreateInfo.flags = 0;
@@ -2129,17 +2129,17 @@ public:
         pipelineLayoutCreateInfo.pSetLayouts = &descLayout;
         pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
         pipelineLayoutCreateInfo.pPushConstantRanges = &pcr;
-        CHECKVK(vkCreatePipelineLayout(Platform.device, &pipelineLayoutCreateInfo, nullptr, &pipeLayout));
+        CHECKVK(vkCreatePipelineLayout(Platform.device_, &pipelineLayoutCreateInfo, nullptr, &pipeLayout));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (pipeLayout) vkDestroyPipelineLayout(Platform.device, pipeLayout, nullptr);
-            if (descLayout) vkDestroyDescriptorSetLayout(Platform.device, descLayout, nullptr);
+            if (pipeLayout) vkDestroyPipelineLayout(Platform.device_, pipeLayout, nullptr);
+            if (descLayout) vkDestroyDescriptorSetLayout(Platform.device_, descLayout, nullptr);
         }
         descLayout = VK_NULL_HANDLE;
         pipeLayout = VK_NULL_HANDLE;
@@ -2170,13 +2170,13 @@ public:
         descPoolInfo.maxSets = 1;
         descPoolInfo.poolSizeCount = (uint32_t)descPoolSizes.size();
         descPoolInfo.pPoolSizes = descPoolSizes.data();
-        CHECKVK(vkCreateDescriptorPool(Platform.device, &descPoolInfo, nullptr, &descPool));
+        CHECKVK(vkCreateDescriptorPool(Platform.device_, &descPoolInfo, nullptr, &descPool));
 
         VkDescriptorSetAllocateInfo descAllocInfo = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
         descAllocInfo.descriptorPool = descPool;
         descAllocInfo.descriptorSetCount = 1;
         descAllocInfo.pSetLayouts = &layout.descLayout;
-        CHECKVK(vkAllocateDescriptorSets(Platform.device, &descAllocInfo, &descSet));
+        CHECKVK(vkAllocateDescriptorSets(Platform.device_, &descAllocInfo, &descSet));
 
         return true;
     }
@@ -2191,7 +2191,7 @@ public:
         write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write.pImageInfo = &imgInfo;
 
-        vkUpdateDescriptorSets(Platform.device, 1, &write, 0, nullptr);
+        vkUpdateDescriptorSets(Platform.device_, 1, &write, 0, nullptr);
     }
 
     void Bind(const PipelineLayout& pipeLayout)
@@ -2201,9 +2201,9 @@ public:
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (descPool) vkDestroyDescriptorPool(Platform.device, descPool, nullptr);
+            if (descPool) vkDestroyDescriptorPool(Platform.device_, descPool, nullptr);
         }
         descSet = VK_NULL_HANDLE;
         descPool = VK_NULL_HANDLE;
@@ -2361,16 +2361,16 @@ public:
         pipeInfo.layout = layout.pipeLayout;
         pipeInfo.renderPass = rp.pass;
         pipeInfo.subpass = 0;
-        CHECKVK(vkCreateGraphicsPipelines(Platform.device, VK_NULL_HANDLE, 1, &pipeInfo, nullptr, &pipe));
+        CHECKVK(vkCreateGraphicsPipelines(Platform.device_, VK_NULL_HANDLE, 1, &pipeInfo, nullptr, &pipe));
 
         return true;
     }
 
     void Release()
     {
-        if (Platform.device)
+        if (Platform.device_)
         {
-            if (pipe) vkDestroyPipeline(Platform.device, pipe, nullptr);
+            if (pipe) vkDestroyPipeline(Platform.device_, pipe, nullptr);
         }
         pipe = VK_NULL_HANDLE;
     }

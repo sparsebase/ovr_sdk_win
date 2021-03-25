@@ -77,7 +77,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemGroup Condition="'$(VulkanSDK_Found)'=='true'">
-    <ClCompile Include="..\..\..\main.cpp" />
+    <ClCompile Include="..\..\..\mainVK.cpp" />
     <ClInclude Include="..\..\..\..\Common\Win32_VulkanAppUtil.h" />
     <CustomBuild Include="..\..\..\ort.frag">
       <FileType>Document</FileType>

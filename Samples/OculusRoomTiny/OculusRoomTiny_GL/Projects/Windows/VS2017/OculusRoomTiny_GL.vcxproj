@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\main.cpp" />
+    <ClCompile Include="..\..\..\mainGL.cpp" />
     <ClCompile Include="..\..\..\..\..\..\LibOVRKernel\Src\GL\CAPI_GLE.cpp" />
   </ItemGroup>
   <ItemGroup>
