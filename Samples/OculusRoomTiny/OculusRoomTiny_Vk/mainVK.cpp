@@ -176,7 +176,7 @@ public:
         CHECKOVR(ovr_GetTextureSwapChainLength(session, textureChain, &textureCount));
 
         int depthCount = 0;
-        CHECKOVR(ovr_GetTextureSwapChainLength(session, textureChain, &depthCount));
+        CHECKOVR(ovr_GetTextureSwapChainLength(session, depthChain, &depthCount));
 
         CHECK(textureCount == depthCount);
 
@@ -416,12 +416,12 @@ static bool MainLoop(bool retryCreate)
         Abort(ovrError_InvalidOperation);
     }
 
-    // Create mirror texture
-    if (!mirrorTexture.Create(session, windowSize))
-    {
-        if (retryCreate) goto Done;
-        VALIDATE(false, "Failed to create mirror texture.");
-    }
+//     // Create mirror texture
+//     if (!mirrorTexture.Create(session, windowSize))
+//     {
+//         if (retryCreate) goto Done;
+//         VALIDATE(false, "Failed to create mirror texture.");
+//     }
 
     // FloorLevel will give tracking poses where the floor height is 0
     ovr_SetTrackingOriginType(session, ovrTrackingOrigin_FloorLevel);
@@ -455,16 +455,16 @@ static bool MainLoop(bool retryCreate)
         }
     }
 
-    // Get swapchain images ready for blitting (use drawCmd instead of xferCmd to keep things simple)
-    Platform.swapChain_.Prepare(Platform.CurrentDrawCmd().buf);
-
-    // Perform all init-time commands
-    if (!(Platform.CurrentDrawCmd().End() && Platform.CurrentDrawCmd().Exec(Platform.drawQueue_) && Platform.CurrentDrawCmd().Wait()))
-    {
-        Debug.Log("Executing initial command buffer failed");
-        Abort(ovrError_InvalidOperation);
-    }
-    Platform.CurrentDrawCmd().Reset();
+//     // Get swapchain images ready for blitting (use drawCmd instead of xferCmd to keep things simple)
+//     Platform.swapChain_.Prepare(Platform.CurrentDrawCmd().buf);
+// 
+//     // Perform all init-time commands
+//     if (!(Platform.CurrentDrawCmd().End() && Platform.CurrentDrawCmd().Exec(Platform.drawQueue_) && Platform.CurrentDrawCmd().Wait()))
+//     {
+//         Debug.Log("Executing initial command buffer failed");
+//         Abort(ovrError_InvalidOperation);
+//     }
+//     Platform.CurrentDrawCmd().Reset();
 
     // Let the compositor know which queue to synchronize with
     ovr_SetSynchronizationQueueVk(session, Platform.drawQueue_);
@@ -522,6 +522,7 @@ static bool MainLoop(bool retryCreate)
             cmd.Reset();
             cmd.Begin();
 
+            //Rendering to Oculus eyes
             for (auto eye: { ovrEye_Left, ovrEye_Right })
             {
                 // Switch to eye render target
@@ -553,9 +554,9 @@ static bool MainLoop(bool retryCreate)
                 Matrix4f proj = Matrix4f::Scaling(1.0f, -1.0f, 1.0f) * ovrMatrix4f_Projection(hmdDesc.DefaultEyeFov[eye], 0.2f, 1000.0f, ovrProjection_None);
                 posTimewarpProjectionDesc = ovrTimewarpProjectionDesc_FromProjection(proj, ovrProjection_None);
 
-                // Render world
+                ////////////////// Here is where all the objects are rendered ///////
                 roomScene.Render(view, proj, layout, vb);
-
+                /// /////////////////////////////////////////////////////////////////
                 vkCmdEndRenderPass(cmd.buf);
             }
 
@@ -605,31 +606,31 @@ static bool MainLoop(bool retryCreate)
         // Blit mirror texture to the swapchain's back buffer
         // For now block until we have an output to render into
         // The swapchain uses VK_PRESENT_MODE_IMMEDIATE_KHR or VK_PRESENT_MODE_MAILBOX_KHR to avoid blocking eye rendering
-        Platform.swapChain_.Acquire();
-
-        Platform.xferCmd_.Reset();
-        Platform.xferCmd_.Begin();
-
-        auto presentImage = Platform.swapChain_.image[Platform.swapChain_.renderImageIdx];
-
-        // PRESENT_SRC_KHR -> TRANSFER_DST_OPTIMAL
-        VkImageMemoryBarrier presentBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-        presentBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        presentBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        presentBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        presentBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; 
-        presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        presentBarrier.image = presentImage;
-        presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        presentBarrier.subresourceRange.baseMipLevel = 0;
-        presentBarrier.subresourceRange.levelCount = 1;
-        presentBarrier.subresourceRange.baseArrayLayer = 0;
-        presentBarrier.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(Platform.xferCmd_.buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-            0, nullptr,
-            0, nullptr,
-            1, &presentBarrier);
+//         Platform.swapChain_.Acquire();
+// 
+//         Platform.xferCmd_.Reset();
+//         Platform.xferCmd_.Begin();
+// 
+//         auto presentImage = Platform.swapChain_.image[Platform.swapChain_.renderImageIdx];
+// 
+//         // PRESENT_SRC_KHR -> TRANSFER_DST_OPTIMAL
+//         VkImageMemoryBarrier presentBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+//         presentBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+//         presentBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+//         presentBarrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+//         presentBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+//         presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; 
+//         presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+//         presentBarrier.image = presentImage;
+//         presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//         presentBarrier.subresourceRange.baseMipLevel = 0;
+//         presentBarrier.subresourceRange.levelCount = 1;
+//         presentBarrier.subresourceRange.baseArrayLayer = 0;
+//         presentBarrier.subresourceRange.layerCount = 1;
+//         vkCmdPipelineBarrier(Platform.xferCmd_.buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+//             0, nullptr,
+//             0, nullptr,
+//             1, &presentBarrier);
 
         //#define USE_MIRROR_BLIT
         #if defined(USE_MIRROR_BLIT)
@@ -654,51 +655,51 @@ static bool MainLoop(bool retryCreate)
                 presentImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region, VK_FILTER_LINEAR);
         #else
             // Copy using xferCmd which has VK_QUEUE_TRANSFER_BIT set and can operate asynchronously to drawCmd
-            VkImageCopy region = {};
-            region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.srcSubresource.mipLevel = 0;
-            region.srcSubresource.baseArrayLayer = 0;
-            region.srcSubresource.layerCount = 1;
-            region.srcOffset = { 0, 0, 0 };
-            region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.dstSubresource.mipLevel = 0;
-            region.dstSubresource.baseArrayLayer = 0;
-            region.dstSubresource.layerCount = 1;
-            region.dstOffset = { 0, 0, 0 };
-            region.extent = { (uint32_t)windowSize.w, (uint32_t)windowSize.h, 1 };
-            vkCmdCopyImage(Platform.xferCmd_.buf,
-                mirrorTexture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                presentImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &region);
+//             VkImageCopy region = {};
+//             region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//             region.srcSubresource.mipLevel = 0;
+//             region.srcSubresource.baseArrayLayer = 0;
+//             region.srcSubresource.layerCount = 1;
+//             region.srcOffset = { 0, 0, 0 };
+//             region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//             region.dstSubresource.mipLevel = 0;
+//             region.dstSubresource.baseArrayLayer = 0;
+//             region.dstSubresource.layerCount = 1;
+//             region.dstOffset = { 0, 0, 0 };
+//             region.extent = { (uint32_t)windowSize.w, (uint32_t)windowSize.h, 1 };
+//             vkCmdCopyImage(Platform.xferCmd_.buf,
+//                 mirrorTexture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+//                 presentImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+//                 1, &region);
         #endif
 
-        // TRANSFER_DST_OPTIMAL -> PRESENT_SRC_KHR
-        presentBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-        presentBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        presentBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        presentBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; 
-        presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        presentBarrier.image = presentImage;
-        presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        presentBarrier.subresourceRange.baseMipLevel = 0;
-        presentBarrier.subresourceRange.levelCount = 1;
-        presentBarrier.subresourceRange.baseArrayLayer = 0;
-        presentBarrier.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(Platform.xferCmd_.buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
-            0, nullptr,
-            0, nullptr,
-            1, &presentBarrier);
-
-        Platform.xferCmd_.End();
-
-        Platform.xferCmd_.Exec(Platform.xferQueue_);
-        Platform.xferCmd_.Wait();
-
-        // For now just block on Acquire's fence, could use a semaphore with e.g.:
-        // Platform.sc.Present(Platform.xferQueue, Platform.xferDone);
-        Platform.swapChain_.Present(Platform.xferQueue_, VK_NULL_HANDLE);
+//         // TRANSFER_DST_OPTIMAL -> PRESENT_SRC_KHR
+//         presentBarrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+//         presentBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+//         presentBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+//         presentBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+//         presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+//         presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; 
+//         presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+//         presentBarrier.image = presentImage;
+//         presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//         presentBarrier.subresourceRange.baseMipLevel = 0;
+//         presentBarrier.subresourceRange.levelCount = 1;
+//         presentBarrier.subresourceRange.baseArrayLayer = 0;
+//         presentBarrier.subresourceRange.layerCount = 1;
+//         vkCmdPipelineBarrier(Platform.xferCmd_.buf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+//             0, nullptr,
+//             0, nullptr,
+//             1, &presentBarrier);
+// 
+//         Platform.xferCmd_.End();
+// 
+//         Platform.xferCmd_.Exec(Platform.xferQueue_);
+//         Platform.xferCmd_.Wait();
+// 
+//         // For now just block on Acquire's fence, could use a semaphore with e.g.:
+//         // Platform.sc.Present(Platform.xferQueue, Platform.xferDone);
+//         Platform.swapChain_.Present(Platform.xferQueue_, VK_NULL_HANDLE);
 
         ++frameIndex;
     }
