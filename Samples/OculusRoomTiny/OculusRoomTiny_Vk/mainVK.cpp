@@ -45,26 +45,26 @@ static void LogOculusError(std::string msg)
 class RenderTexture: public VulkanObject
 {
 public:
-    VkImage         image;
-    VkImageView     colorView;
-    VkImageView     depthView;
-    Framebuffer     fb;
+    VkImage         image_;
+    VkImageView     colorView_;
+    VkImageView     depthView_;
+    Framebuffer     frameBuf_;
 
     RenderTexture() :
-        image(VK_NULL_HANDLE),
-        colorView(VK_NULL_HANDLE),
-        depthView(VK_NULL_HANDLE),
-        fb()
+        image_(VK_NULL_HANDLE),
+        colorView_(VK_NULL_HANDLE),
+        depthView_(VK_NULL_HANDLE),
+        frameBuf_()
     {
     }
 
     bool Create(VkImage anImage, VkImage depth, VkFormat format, VkExtent2D size, RenderPass& renderPass)
     {
-        image = anImage;
+        image_ = anImage;
 
         // Create color image view
         VkImageViewCreateInfo colorViewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        colorViewInfo.image = image;
+        colorViewInfo.image = image_;
         colorViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         colorViewInfo.format = format;
         colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
@@ -76,7 +76,7 @@ public:
         colorViewInfo.subresourceRange.levelCount = 1;
         colorViewInfo.subresourceRange.baseArrayLayer = 0;
         colorViewInfo.subresourceRange.layerCount = 1;
-        CHECKVK(vkCreateImageView(Platform.device_, &colorViewInfo, nullptr, &colorView));
+        CHECKVK(vkCreateImageView(Platform.device_, &colorViewInfo, nullptr, &colorView_));
 
         // Create depth image view
         VkImageViewCreateInfo depthViewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
@@ -93,30 +93,30 @@ public:
         depthViewInfo.subresourceRange.baseArrayLayer = 0;
         depthViewInfo.subresourceRange.layerCount = 1;
         depthViewInfo.flags = 0;
-        CHECKVK(vkCreateImageView(Platform.device_, &depthViewInfo, nullptr, &depthView));
+        CHECKVK(vkCreateImageView(Platform.device_, &depthViewInfo, nullptr, &depthView_));
 		
-        CHECK(fb.Create(size, renderPass, colorView, depthView));
+        CHECK(frameBuf_.Create(size, renderPass, colorView_, depthView_));
 
         return true;
     }
 
     void Release()
     {
-        fb.Release();
-        if (colorView)
+        frameBuf_.Release();
+        if (colorView_)
         {
-            vkDestroyImageView(Platform.device_, colorView, nullptr);
+            vkDestroyImageView(Platform.device_, colorView_, nullptr);
         }
 
-        if (depthView)
+        if (depthView_)
         {
-            vkDestroyImageView(Platform.device_, depthView, nullptr);
+            vkDestroyImageView(Platform.device_, depthView_, nullptr);
         }
 
         // Note we don't own image, it will get destroyed when ovr_DestroyTextureSwapChain is called
-        image = VK_NULL_HANDLE;
-        colorView = VK_NULL_HANDLE;
-        depthView = VK_NULL_HANDLE;
+        image_ = VK_NULL_HANDLE;
+        colorView_ = VK_NULL_HANDLE;
+        depthView_ = VK_NULL_HANDLE;
     }
 };
 
@@ -200,7 +200,7 @@ public:
     {
         int index = 0;
         ovr_GetTextureSwapChainCurrentIndex(session, textureChain, &index);
-        return texElements[index].fb;
+        return texElements[index].frameBuf_;
     }
 
     Recti GetViewport()
@@ -299,35 +299,35 @@ public:
 class EyeState : public VulkanObject
 {
 public:
-	ovrSizei                size;
-	RenderPass              rp;
-	Pipeline                pipe;
-	TextureSwapChain        tex;
+	ovrSizei                size_;
+	RenderPass              renderpass_;
+	Pipeline                pipeline_;
+	TextureSwapChain        tex_;
 
 	EyeState() :
-		size(),
-		rp(),
-		pipe(),
-		tex()
+		size_(),
+		renderpass_(),
+		pipeline_(),
+		tex_()
 	{
 	}
 
 	bool Create(ovrSession session, ovrSizei eyeSize, const PipelineLayout& layout, const ShaderProgram& sp, const VertexBuffer<Vertex>& vb)
 	{
-		size = eyeSize;
-		VkExtent2D vkSize = { (uint32_t)size.w, (uint32_t)size.h };
+		size_ = eyeSize;
+		VkExtent2D vkSize = { (uint32_t)size_.w, (uint32_t)size_.h };
 		// Note: Format is hard-coded to VK_FORMAT_B8G8R8A8_SRGB since it is directly presentable on both Nvidia and AMD
-		CHECK(rp.Create(VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_D32_SFLOAT));
-		CHECK(pipe.Create(vkSize, layout, rp, sp, vb));
-		CHECK(tex.Create(session, vkSize, rp));
+		CHECK(renderpass_.Create(VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_D32_SFLOAT));
+		CHECK(pipeline_.Create(vkSize, layout, renderpass_, sp, vb));
+		CHECK(tex_.Create(session, vkSize, renderpass_));
 		return true;
 	}
 
 	void Release()
 	{
-		tex.Release();
-		pipe.Release();
-		rp.Release();
+		tex_.Release();
+		pipeline_.Release();
+		renderpass_.Release();
 	}
 };
 
@@ -534,15 +534,15 @@ static bool MainLoop(bool retryCreate)
                 clearValues[1].depthStencil.depth = 1.0f;
                 clearValues[1].depthStencil.stencil = 0;
                 VkRenderPassBeginInfo rpBegin = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-                rpBegin.renderPass = perEye[eye].rp.pass;
-                rpBegin.framebuffer = perEye[eye].tex.GetFramebuffer().fb;
-                rpBegin.renderArea = { { 0, 0 }, perEye[eye].tex.size };
+                rpBegin.renderPass = perEye[eye].renderpass_.pass;
+                rpBegin.framebuffer = perEye[eye].tex_.GetFramebuffer().fb;
+                rpBegin.renderArea = { { 0, 0 }, perEye[eye].tex_.size };
                 rpBegin.clearValueCount = (uint32_t)clearValues.size();
                 rpBegin.pClearValues = clearValues.data();
 
                 vkCmdBeginRenderPass(cmd.buf, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
-                vkCmdBindPipeline(cmd.buf, VK_PIPELINE_BIND_POINT_GRAPHICS, perEye[eye].pipe.pipe);
+                vkCmdBindPipeline(cmd.buf, VK_PIPELINE_BIND_POINT_GRAPHICS, perEye[eye].pipeline_.pipe);
 
                 // Get view and projection matrices
                 Matrix4f finalRollPitchYaw = rollPitchYaw * Matrix4f(eyeRenderPose[eye].Orientation);
@@ -566,7 +566,7 @@ static bool MainLoop(bool retryCreate)
             // Commit changes to the textures so they get picked up by the compositor
             for (auto eye: { ovrEye_Left, ovrEye_Right })
             {
-                perEye[eye].tex.Commit();
+                perEye[eye].tex_.Commit();
 	        }
         }
 	    else // Sleep to avoid spinning on mirror updates while HMD is doffed
@@ -583,9 +583,9 @@ static bool MainLoop(bool retryCreate)
 
         for (auto eye: { ovrEye_Left, ovrEye_Right })
         {
-            ld.ColorTexture[eye] = perEye[eye].tex.textureChain;
-            ld.DepthTexture[eye] = perEye[eye].tex.depthChain;
-            ld.Viewport[eye]     = perEye[eye].tex.GetViewport();
+            ld.ColorTexture[eye] = perEye[eye].tex_.textureChain;
+            ld.DepthTexture[eye] = perEye[eye].tex_.depthChain;
+            ld.Viewport[eye]     = perEye[eye].tex_.GetViewport();
             ld.Fov[eye]          = hmdDesc.DefaultEyeFov[eye];
             ld.RenderPose[eye]   = eyeRenderPose[eye];
         }
